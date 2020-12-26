@@ -437,17 +437,6 @@ int follow_shortest_path(struct game *root_game)
 
 int main(void)
 {
-    /*
-
-    Take 2:
-
-    1. Precompute all paths between keys with the gates they pass through
-    2. Filter out longer paths with the same or longer paths between two points with worse or equal requirements to some shorter paths (maybe even drop them in step (1) if I detect them)
-    3. Do the search based on paths that are available at any given time give the set of keys player possesses
-    4. Profit
-
-    */
-
     struct tunnels tunnels = load_tunnels("day18_input.txt");
     struct game game = {
         .tunnels = tunnels,
