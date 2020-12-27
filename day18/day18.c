@@ -21,6 +21,7 @@
 
 #define MAX_TILES 1024
 #define MAX_KEYS_AND_DOORS 26
+#define MAX_TILES_TO_CHECK 16
 
 struct position
 {
@@ -65,9 +66,39 @@ bool position_equal(struct position from, struct position to)
     return (from.x == to.x && from.y == to.y);
 }
 
+struct position position_add(struct position a, struct position b)
+{
+    return (struct position){.x = a.x + b.x, .y = a.y + b.y};
+}
+
 struct path path_find(struct game *game, struct position from, struct position to)
 {
-    int checked_tiles[MAX_TILES] = {0}; // Distances to tiles we checked
+    struct path checked_tiles[MAX_TILES] = {0}; // Distances to tiles we checked
+
+    struct position tiles_to_check[MAX_TILES_TO_CHECK] = {0};
+    size_t tiles_to_check_len = 0;
+
+    tiles_to_check[tiles_to_check_len++] = from;
+
+    while (tiles_to_check_len > 0)
+    {
+        struct position tile = tiles_to_check[--tiles_to_check_len];
+
+        // Check this tile
+
+        if (position_equal(tile, to))
+        {
+        }
+
+        // Check neighboring tiles
+
+        struct position neighbor_offsets[4] = {
+            [0] = position_add(from, (struct position){.x = +0, .y = -1}), // Top
+            [1] = position_add(from, (struct position){.x = +1, .y = +0}), // Right
+            [2] = position_add(from, (struct position){.x = +0, .y = +1}), // Bottom
+            [3] = position_add(from, (struct position){.x = -1, .y = +0}), // Left
+        };
+    }
 
     return (struct path){0};
 }
