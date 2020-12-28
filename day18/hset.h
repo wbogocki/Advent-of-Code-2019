@@ -6,14 +6,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef unsigned long (*hfunc)(void *item);
-typedef int (*hcmpfunc)(void *a, void *b);
-typedef void (*hprint)(void *item);
+typedef unsigned long (*hset_hash_func)(void *item);
+typedef int (*hset_cmp_func)(void *a, void *b);
+typedef void (*hset_print_func)(void *item);
 
 struct hset_meta
 {
-    hfunc hash_func;
-    hcmpfunc cmp_func;
+    hset_hash_func hash_func;
+    hset_cmp_func cmp_func;
     size_t item_size;
 };
 
@@ -35,7 +35,7 @@ void hset_free(struct hset *set);
 void hset_add(struct hset *set, void *item);
 void hset_remove(struct hset *set, void *item);
 bool hset_in(struct hset *set, void *item);
-void hset_print(struct hset *set, hprint print_proc);
+void hset_print(struct hset *set, hset_print_func print_proc);
 
 #ifdef HSET_IMPL
 
@@ -60,7 +60,7 @@ void hset_add(struct hset *set, void *item)
 {
     if (hset_in(set, item))
     {
-        return; // item already present
+        return; // Item already present
     }
 
     unsigned long bucket_index = set->meta.hash_func(item) % set->size;
@@ -107,7 +107,7 @@ void hset_remove(struct hset *set, void *item)
         if (next)
         {
             set->buckets[bucket_index] = *next;
-            free(next); // free the original node memory
+            free(next); // Free the original node memory
         }
         else
         {
@@ -154,7 +154,7 @@ bool hset_in(struct hset *set, void *item)
     return false;
 }
 
-void hset_print(struct hset *set, hprint print_item_func)
+void hset_print(struct hset *set, hset_print_func print_item_func)
 {
     for (size_t i = 0; i < set->size; ++i)
     {

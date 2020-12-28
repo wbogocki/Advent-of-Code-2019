@@ -1,0 +1,12 @@
+{
+    "C_Cpp.default.defines": [
+        "HSET_IMPL",
+        "HSET_TEST",
+        "HMAP_IMPL",
+        "HMAP_TEST"
+    ],
+    "files.associations": {
+        "*.C": "c",
+        "*.H": "c"
+    }
+}
