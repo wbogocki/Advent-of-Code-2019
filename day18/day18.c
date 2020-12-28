@@ -7,6 +7,11 @@
  ** 26 Dec 2020 Taipei **
  */
 
+#define HSET_IMPL
+#define HSET_TEST
+#define HMAP_IMPL
+#define HMAP_TEST
+
 #include <assert.h>
 #include <ctype.h>
 #include <limits.h>
@@ -14,6 +19,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "hmap.h"
+#include "hset.h"
 
 #define MAX_TILES 1024
 #define MAX_KEYS_AND_DOORS 26
@@ -78,8 +85,8 @@ bool position_equal(struct position from, struct position to)
 
 bool position_valid(struct game *game, struct position pos)
 {
-    return ((pos.x >= 0 && pos.x <= game->fixed->w) &&
-            (pos.y >= 0 && pos.y <= game->fixed->h));
+    return ((pos.x >= 0 && pos.x < game->fixed->w) &&
+            (pos.y >= 0 && pos.y < game->fixed->h));
 }
 
 struct position position_add(struct position a, struct position b)
@@ -187,7 +194,7 @@ void game_print(struct game *game)
     {
         for (size_t x = 0; x < game->fixed->w; ++x)
         {
-            char tile = game_tile(&game, (struct position){x, y});
+            char tile = game_tile(game, (struct position){.x = x, .y = y});
             putchar(tile);
         }
         putchar('\n');
@@ -263,7 +270,7 @@ struct game game_load(const char *path)
             struct position from_pos = game.fixed->keys_pos[letter_idx(from_key)];
             struct position to_pos = game.fixed->keys_pos[letter_idx(to_key)];
 
-            game.fixed->paths[letter_idx(from_key)][letter_idx(to_key)] = path_find(&game, from_pos, to_pos);
+            // game.fixed->paths[letter_idx(from_key)][letter_idx(to_key)] = path_find(&game, from_pos, to_pos);
         }
     }
 
@@ -272,6 +279,9 @@ struct game game_load(const char *path)
 
 int main(void)
 {
+    hset_test();
+    return 0;
+
     /*
 
     Take 2:
