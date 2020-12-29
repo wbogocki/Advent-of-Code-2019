@@ -8,9 +8,7 @@
  */
 
 #define HSET_IMPL
-#define HSET_TEST
 #define HMAP_IMPL
-#define HMAP_TEST
 
 #include <assert.h>
 #include <ctype.h>
@@ -22,32 +20,26 @@
 #include "hmap.h"
 #include "hset.h"
 
-#define MAX_TILES 1024
+#define MAX_TILES 8192
 #define MAX_KEYS_AND_DOORS 26
 #define MAX_TILES_TO_CHECK 16
+#define MAX_PATH 1024
 
-#define MAX_PATH_FIND_OPEN_SET 16
-#define MAX_PATH_FIND_CAME_FROM 16
+#define MAX_PATH_FIND_OPEN_SET 128
+#define MAX_PATH_FIND_CAME_FROM 128
 
 struct position
 {
     int x, y;
 };
 
-const struct position INVALID_POSITION = {.x = 0, .y = 0};
-
 struct path
 {
+    struct position pos[MAX_PATH];
     int path_len;
     // Doors this path passes through
     char doors[MAX_KEYS_AND_DOORS];
     int doors_len;
-};
-
-struct path_find_node
-{
-    struct position pos;
-    int score;
 };
 
 struct game_fixed
@@ -94,34 +86,87 @@ struct position position_add(struct position a, struct position b)
     return (struct position){.x = a.x + b.x, .y = a.y + b.y};
 }
 
+bool position_in_array(struct position *array, size_t array_len, struct position pos)
+{
+    for (int i = 0; i < array_len; ++i)
+    {
+        if (position_equal(array[i], pos))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+size_t game_tile_index(struct game *game, struct position pos)
+{
+    assert(position_valid(game, pos));
+    return (pos.y * game->fixed->w) + pos.x;
+}
+
 char game_tile(struct game *game, struct position pos)
 {
     assert(position_valid(game, pos));
     return (game->fixed->tiles[(pos.y * game->fixed->w) + pos.x]);
 }
 
-struct path path_find_reconstruct_path()
+void path_find_reverse_path(struct position *pos, size_t len)
 {
+    size_t left = 0;
+    size_t right = len - 1;
+    while (left < right)
+    {
+        struct position tmp = pos[left];
+        pos[left++] = pos[right];
+        pos[right--] = tmp;
+    }
 }
 
-int path_find_score(struct position pos, struct position target)
+struct path path_find_reconstruct_path(struct game *game, struct position *came_from, struct position origin, struct position current)
 {
-    return 1000 - distance(pos, target);
+    struct path path = {0};
+    path.pos[path.path_len++] = current;
+
+    while (!position_equal(current, origin))
+    {
+        current = came_from[game_tile_index(game, current)];
+
+        char tile = game_tile(game, current);
+        if (tile >= 'A' && tile <= 'Z')
+        {
+            assert(path.doors_len < MAX_KEYS_AND_DOORS);
+            path.doors[path.doors_len++] = tile;
+        }
+
+        assert(path.path_len < MAX_PATH);
+        path.pos[path.path_len++] = current;
+    }
+
+    // We recunstructed the path in reverse
+    path_find_reverse_path(path.pos, path.path_len);
+
+    return path;
 }
 
-struct path_find_node path_find_pop_best_node(struct path_find_node *open_set, size_t *open_set_len)
+int path_find_heuristic(struct position pos, struct position target)
+{
+    return distance(pos, target);
+}
+
+struct position path_find_pop_best_node(struct game *game, struct position *open_set, size_t *open_set_len, int *scores)
 {
     int best_idx = 0, best_score = 0;
     for (int i = 0; i < *open_set_len; ++i)
     {
-        if (best_score < open_set[i].score)
+        int tile_idx = game_tile_index(game, open_set[i]);
+        if (best_score < scores[tile_idx])
         {
             best_idx = 0;
-            best_score = open_set[i].score;
+            best_score = scores[tile_idx];
         }
     }
-    struct path_find_node best_node = open_set[best_idx];
-    open_set[best_idx] = open_set[(*open_set_len)--];
+    struct position best_node = open_set[best_idx];
+    open_set[best_idx] = open_set[--(*open_set_len)];
     return best_node;
 }
 
@@ -129,30 +174,40 @@ struct path path_find(struct game *game, struct position from, struct position t
 {
     // Implements the A* algorithm
 
-    struct path_find_node open_set[MAX_PATH_FIND_OPEN_SET] = {0};
+    struct position open_set[MAX_PATH_FIND_OPEN_SET] = {0};
     size_t open_set_len = 0;
 
-    struct position came_from[MAX_PATH_FIND_CAME_FROM] = {0};
-    size_t came_from_len = 0;
+    struct position came_from[MAX_TILES] = {0};
+
+    int g_scores[MAX_TILES] = {0};
+    int f_scores[MAX_TILES] = {0};
 
     // Initialize
 
-    open_set[open_set_len++] = (struct path_find_node){
-        .pos = from,
-        .score = path_find_score(from, to),
-    };
+    open_set[open_set_len++] = from;
+
+    for (int i = 0; i < MAX_TILES; ++i)
+    {
+        g_scores[i] = INT_MAX;
+        f_scores[i] = INT_MAX;
+    }
+
+    g_scores[game_tile_index(game, from)] = 0;
+    f_scores[game_tile_index(game, from)] = path_find_heuristic(from, to);
 
     // Search
 
     while (open_set_len != 0)
     {
-        // Get node with greatest score as next
+        // Get node with best score as next
 
-        struct path_find_node current = path_find_pop_best_node(open_set, &open_set_len);
-        if (position_equal(current.pos, to))
+        struct position current = path_find_pop_best_node(game, open_set, &open_set_len, f_scores);
+        if (position_equal(current, to))
         {
-            return path_find_reconstruct_path();
+            return path_find_reconstruct_path(game, came_from, from, current);
         }
+
+        //printf("Pop node with the best score: %d,%d\n", current.x, current.y);
 
         // Check neighbors
 
@@ -165,7 +220,7 @@ struct path path_find(struct game *game, struct position from, struct position t
 
         for (int i = 0; i < 4; ++i)
         {
-            struct position neighbor = position_add(current.pos, neighbor_offsets[i]);
+            struct position neighbor = position_add(current, neighbor_offsets[i]);
             if (!position_valid(game, neighbor))
             {
                 continue;
@@ -179,19 +234,42 @@ struct path path_find(struct game *game, struct position from, struct position t
 
             // Calculate the score
 
-            int tentative_score = current.score;
+            int current_tile_idx = game_tile_index(game, current);
+            int neighbor_tile_idx = game_tile_index(game, neighbor);
 
+            int tentative_g_score = g_scores[current_tile_idx] + 1;
+            if (tentative_g_score < g_scores[neighbor_tile_idx])
             {
+                came_from[neighbor_tile_idx] = current;
+                g_scores[neighbor_tile_idx] = tentative_g_score;
+                f_scores[neighbor_tile_idx] = tentative_g_score + path_find_heuristic(neighbor, to);
+
+                if (!position_in_array(open_set, open_set_len, neighbor))
+                {
+                    assert(open_set_len < MAX_PATH_FIND_OPEN_SET);
+                    open_set[open_set_len++] = neighbor;
+                }
             }
         }
     }
+
+    return (struct path){0};
 }
 
 void game_print(struct game *game)
 {
-    printf("w=%d\nh=%d\n", game->fixed->w, game->fixed->h);
+    printf("w=%zu\nh=%zu\n", game->fixed->w, game->fixed->h);
+
+    printf("  ");
+    for (size_t x = 0; x < game->fixed->w; ++x)
+    {
+        printf("%zu", x % 10);
+    }
+    putchar('\n');
+
     for (size_t y = 0; y < game->fixed->h; ++y)
     {
+        printf("%zu ", y % 10);
         for (size_t x = 0; x < game->fixed->w; ++x)
         {
             char tile = game_tile(game, (struct position){.x = x, .y = y});
@@ -201,11 +279,52 @@ void game_print(struct game *game)
     }
 }
 
+void game_print_path(struct game *game, char from_key, char to_key)
+{
+    struct path path = game->fixed->paths[letter_idx(from_key)][letter_idx(to_key)];
+
+    printf("path %c%c through %d doors", from_key, to_key, path.doors_len);
+
+    if (path.doors_len > 0)
+    {
+        putchar(' ');
+        for (size_t i = 0; i < path.doors_len; ++i)
+        {
+            putchar(path.doors[i]);
+
+            if (i != path.doors_len - 1)
+            {
+                putchar(',');
+            }
+        }
+    }
+
+    printf(": ");
+
+    if (path.path_len == 0)
+    {
+        printf("(none)\n");
+        return;
+    }
+
+    for (size_t i = 0; i < path.path_len; ++i)
+    {
+        printf("%d,%d", path.pos[i].x, path.pos[i].y);
+
+        if (i != path.path_len - 1)
+        {
+            printf(" -> ");
+        }
+    }
+
+    putchar('\n');
+}
+
 struct game game_load(const char *path)
 {
     struct game game = {
         .fixed = malloc(sizeof(struct game_fixed)),
-        .player_pos = INVALID_POSITION,
+        .player_pos = {0},
         .keys = {0},
         .keys_len = 0,
     };
@@ -270,7 +389,13 @@ struct game game_load(const char *path)
             struct position from_pos = game.fixed->keys_pos[letter_idx(from_key)];
             struct position to_pos = game.fixed->keys_pos[letter_idx(to_key)];
 
-            // game.fixed->paths[letter_idx(from_key)][letter_idx(to_key)] = path_find(&game, from_pos, to_pos);
+            // Look for paths if these keys exist
+
+            if (!position_equal(from_pos, (struct position){0}) && !position_equal(to_pos, (struct position){0}))
+            {
+                //printf("Looking for a path between %c and %c\n", from_key, to_key);
+                game.fixed->paths[letter_idx(from_key)][letter_idx(to_key)] = path_find(&game, from_pos, to_pos);
+            }
         }
     }
 
@@ -279,23 +404,18 @@ struct game game_load(const char *path)
 
 int main(void)
 {
-    hset_test();
-    return 0;
-
     /*
 
     Take 2:
 
-    1. Precompute all paths between keys with the gates they pass through
-    2. Filter out longer paths with the same or longer paths between two points
-    with worse or equal requirements to some shorter paths (maybe even drop them
-    in step (1) if I detect them)
-    3. Do the search based on paths that are available at any given time give the
-    set of keys player possesses
-    4. Profit
+    1. [x] Precompute all paths between keys with the gates they pass through
+    2. [ ] Filter out longer paths with the same or longer paths between two points with worse or equal requirements to some shorter paths (maybe even drop them in step (1) if I detect them)
+    3. [ ] Do the search based on paths that are available at any given time give the set of keys player possesses
+    4. [ ] Profit
 
     */
 
     struct game game = game_load("day18_input.txt");
     game_print(&game);
+    game_print_path(&game, 'a', 'z');
 }

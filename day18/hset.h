@@ -35,7 +35,7 @@ void hset_free(struct hset *set);
 void hset_add(struct hset *set, void *item);
 void hset_remove(struct hset *set, void *item);
 bool hset_in(struct hset *set, void *item);
-void hset_print(struct hset *set, hset_print_func print_proc);
+void hset_print(struct hset *set, hset_print_func print_func);
 
 #ifdef HSET_IMPL
 
@@ -125,6 +125,7 @@ void hset_remove(struct hset *set, void *item)
                 struct hset_bucket *next_next = bucket->next->next;
                 free(bucket->next);
                 bucket->next = next_next;
+                return;
             }
 
             bucket = bucket->next;
@@ -263,6 +264,8 @@ void hset_test()
     printf("Hello in set: %s\n", hset_in(&set, &hello) ? "true" : "false");
     printf("Bob in set: %s\n", hset_in(&set, &bob) ? "true" : "false");
     printf("Albatross in set: %s\n", hset_in(&set, &albatross) ? "true" : "false");
+
+    hset_free(&set);
 }
 
 #endif // HSET_TEST

@@ -60,7 +60,16 @@ void hmap_free(struct hmap *map)
 
 void hmap_insert(struct hmap *map, void *key, void *value)
 {
-    // TODO: Replace if key exists
+    // Replace if key exists
+
+    void *existing_value = hmap_get(map, key);
+    if (existing_value)
+    {
+        memcpy(existing_value, value, map->meta.value_size);
+        return;
+    }
+
+    // Insert new
 
     unsigned long bucket_index = map->meta.hash_func(key) % map->size;
 
@@ -131,6 +140,7 @@ void hmap_remove(struct hmap *map, void *key)
                 struct hmap_bucket *next_next = bucket->next->next;
                 free(bucket->next);
                 bucket->next = next_next;
+                return;
             }
 
             bucket = bucket->next;
@@ -144,7 +154,7 @@ void *hmap_get(struct hmap *map, void *key)
 
     if (map->buckets[bucket_index].key == NULL)
     {
-        return false;
+        return NULL;
     }
 
     for (struct hmap_bucket *bucket = &map->buckets[bucket_index];
@@ -153,14 +163,14 @@ void *hmap_get(struct hmap *map, void *key)
     {
         if (map->meta.key_cmp_func(key, bucket->key) == 0)
         {
-            return true;
+            return bucket->value;
         }
     }
 
-    return false;
+    return NULL;
 }
 
-void hmap_print(struct hmap *map, hmap_print_func print_proc)
+void hmap_print(struct hmap *map, hmap_print_func print_func)
 {
     for (size_t i = 0; i < map->size; ++i)
     {
@@ -177,7 +187,7 @@ void hmap_print(struct hmap *map, hmap_print_func print_proc)
                  bucket = bucket->next)
             {
                 putchar('\"');
-                print_item_func(bucket->key, bucket->value);
+                print_func(bucket->key, bucket->value);
                 putchar('\"');
                 if (bucket->next)
                 {
@@ -191,5 +201,76 @@ void hmap_print(struct hmap *map, hmap_print_func print_proc)
 }
 
 #endif // HMAP_IMPL
+
+#ifdef HMAP_TEST
+
+struct hmap_test_key
+{
+    const char *str;
+};
+
+struct hmap_test_value
+{
+    const char *str;
+};
+
+unsigned long
+hmap_test_hash(void *key)
+{
+    const char *str = ((struct hmap_test_key *)key)->str;
+
+    unsigned long hash = 5381;
+
+    for (const char *c = str; *c; ++c)
+    {
+        hash = ((hash << 5) + hash) + *c;
+    }
+
+    return hash;
+}
+
+int hmap_test_key_compare(void *a, void *b)
+{
+    const char *str_a = ((struct hmap_test_key *)a)->str;
+    const char *str_b = ((struct hmap_test_key *)b)->str;
+    return strcmp(str_a, str_b);
+}
+
+void hmap_test_print(void *key, void *value)
+{
+    const char *key_str = ((struct hmap_test_key *)key)->str;
+    const char *value_str = ((struct hmap_test_value *)value)->str;
+    printf("%s -> %s", key_str, value_str);
+}
+
+void hmap_test()
+{
+    struct hmap map = hmap_alloc((struct hmap_meta){
+                                     .hash_func = hmap_test_hash,
+                                     .key_cmp_func = hmap_test_key_compare,
+                                     .key_size = sizeof(struct hmap_test_key),
+                                     .value_size = sizeof(struct hmap_test_value),
+                                 },
+                                 8);
+
+    struct hmap_test_key alice = {.str = "alice"};
+    struct hmap_test_key bob = {.str = "bob"};
+    struct hmap_test_key pigeon = {.str = "albatross"};
+
+    hmap_insert(&map, &alice, &bob);
+    hmap_insert(&map, &bob, &pigeon);
+    hmap_insert(&map, &bob, &bob);
+    hmap_insert(&map, &pigeon, &alice);
+
+    hmap_remove(&map, &pigeon);
+
+    puts(((struct hmap_test_value *)hmap_get(&map, &pigeon)) ? "present" : "null");
+
+    hmap_print(&map, hmap_test_print);
+
+    hmap_free(&map);
+}
+
+#endif // HMAP_TEST
 
 #endif // __HMAP_H__
