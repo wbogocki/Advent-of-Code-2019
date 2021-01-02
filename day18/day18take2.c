@@ -318,23 +318,23 @@ void game_print_path(struct game *game, struct path *path)
         }
     }
 
-    // printf(": ");
+    printf(": ");
 
-    // if (path->len == 0)
-    // {
-    //     printf("(none)\n");
-    //     return;
-    // }
+    if (path->len == 0)
+    {
+        printf("(none)\n");
+        return;
+    }
 
-    // for (size_t i = 0; i < path->len; ++i)
-    // {
-    //     printf("%d,%d", path->pos[i].x, path->pos[i].y);
+    for (size_t i = 0; i < path->len; ++i)
+    {
+        printf("%d,%d", path->pos[i].x, path->pos[i].y);
 
-    //     if (i != path->len - 1)
-    //     {
-    //         printf(" -> ");
-    //     }
-    // }
+        if (i != path->len - 1)
+        {
+            printf(" -> ");
+        }
+    }
 
     putchar('\n');
 }
@@ -478,204 +478,196 @@ struct game game_load(const char *path)
     return game;
 }
 
-int get_path_length(struct game *game, const char *path, size_t path_len)
+struct game find_shortest_path_pop_best_game(struct game *games, size_t *games_len)
 {
-    int length = 0;
-    for (size_t i = 1; i < path_len; ++i)
+    int best_idx = 0, best_paths_len = 0;
+    for (int i = 0; i < *games_len; ++i)
     {
-        struct path *precom_path = game_get_precomputed_path(game, path[i - 1], path[i]);
-        length += precom_path->len - 1;
+        if (best_paths_len < games[i].paths_len)
+        {
+            best_idx = i;
+            best_paths_len = games[i].paths_len;
+        }
     }
-    return length;
+    struct game best_game = games[best_idx];
+    games[best_idx] = games[--(*games_len)];
+    return best_game;
 }
 
-bool is_path_open(struct game *game, const char *path, size_t path_len)
+struct game find_shortest_path_to_collect_all_keys(struct game *game)
 {
-    for (int i = 1; i < path_len; ++i)
-    {
-        struct path *precomp_path = game_get_precomputed_path(game, path[i - 1], path[i]);
+    struct game *games = calloc(MAX_GAMES, sizeof(struct game));
+    size_t games_len = 0;
 
-        for (int j = 0; j < precomp_path->doors_len; ++j)
+    struct game *done_games = calloc(MAX_GAMES, sizeof(struct game));
+    size_t done_games_len = 0;
+
+    size_t cutoff_distance = INT_MAX; // Do not compute paths longer than this
+
+    size_t current_best_distance = INT_MAX;
+    size_t iter_count = 0;
+
+    // Initialize
+
+    games[games_len++] = *game;
+
+    // Simulate all games
+
+    while (games_len > 0)
+    {
+        // Pop a game from the games stack
+
+        struct game current = find_shortest_path_pop_best_game(games, &games_len);
+        //struct game current = games[--games_len];
+
+        char current_tile = game_tile(&current, current.player_pos);
+
+        //printf("player %d,%d (%c)\n", current.player_pos.x, current.player_pos.y, current_tile);
+
+        assert(current_tile != '#' && current_tile != '.');
+
+        // Find all possible paths at this point
+
+        struct path *available_paths[MAX_KEYS_AND_DOORS] = {0};
+        size_t available_paths_len = 0;
+
+        bool cutoff_game = false; // The game will not be simulated if this is true
+
+        for (char key = 'a'; key <= 'z'; ++key)
         {
-            char key = tolower(precomp_path->doors[j]);
-            if (memchr(path, key, i + 1) == NULL)
+            //printf("key %c\n", key);
+            if (!current.player_keys[letter_idx(key)])
             {
-                return false;
+                // We don't own this key yet, look for a path to get it
+
+                struct path *path = game_get_precomputed_path(&current, current_tile, key);
+
+                if (path->len > 0)
+                {
+                    // Check if the game has a chance of being the best and is under the cutoff distance
+
+                    int distance_after_path = current.distance + path->len - 1;
+
+                    if (distance_after_path < current_best_distance && distance_after_path < cutoff_distance)
+                    {
+                        // Check if we can take this path at this time by opening all the doors
+
+                        bool blocked = false;
+                        for (size_t i = 0; i < path->doors_len; ++i)
+                        {
+                            char door = path->doors[i];
+                            if (!current.player_keys[letter_idx(door)])
+                            {
+                                blocked = true;
+                                break;
+                            }
+                        }
+
+                        //printf("%c %s\n", key, blocked ? "blocked" : "open");
+
+                        if (!blocked)
+                        {
+                            assert(available_paths_len < MAX_KEYS_AND_DOORS);
+                            available_paths[available_paths_len++] = path;
+                        }
+                    }
+                    else
+                    {
+                        // printf("Rejected a bad path with distance %d compared to current best %d\n",
+                        //        distance_after_path,
+                        //        current_best_distance);
+
+                        cutoff_game = true;
+                    }
+                }
             }
+        }
+
+        if (!cutoff_game)
+        {
+            //printf("available_paths_len %d\n", available_paths_len);
+
+            if (available_paths_len > 0)
+            {
+                // Push games after taking each path onto the games stack
+
+                for (size_t i = 0; i < available_paths_len; ++i)
+                {
+                    struct path *path = available_paths[i];
+
+                    struct position path_end = path->pos[path->len - 1];
+                    char key = game_tile(&current, path_end);
+
+                    struct game game = current;
+                    game.player_pos = path_end;
+                    game.player_keys[letter_idx(key)] = true;
+                    assert(game.paths_len < MAX_KEYS_AND_DOORS);
+                    game.paths[game.paths_len++] = path;
+                    game.distance += path->len - 1;
+
+                    assert(games_len < MAX_GAMES);
+                    games[games_len++] = game;
+                }
+            }
+            else
+            {
+                assert(done_games_len < MAX_GAMES);
+                done_games[done_games_len++] = current;
+
+                if (current.distance < current_best_distance)
+                {
+                    current_best_distance = current.distance;
+                }
+            }
+        }
+
+        if (iter_count % 1000000 == 0)
+        {
+            printf("%zu: %zu games remaining, %zu games finished (current best: %d)\n",
+                   iter_count, games_len, done_games_len, current_best_distance);
+        }
+
+        ++iter_count;
+    }
+
+    // Get the shortest path
+
+    struct game *best_game = &done_games[0];
+
+    for (size_t i = 0; i < done_games_len; ++i)
+    {
+        if (done_games[i].distance < best_game->distance)
+        {
+            best_game = &done_games[i];
         }
     }
 
-    return true;
-}
+    struct game best_game_copy = *best_game;
 
-//
+    free(done_games);
+    free(games);
+
+    return best_game_copy;
+}
 
 int main(void)
 {
     /*
 
-    1. Find one path that's valid
-    2. Swap letters on that path if the new path would be shorter and still valid
+    Take 2:
+
+    1. [x] Precompute all paths between keys with the gates they pass through
+    2. [-] Filter out longer paths with the same or longer paths between two points with worse or equal requirements to some shorter paths (maybe even drop them in step (1) if I detect them)
+    3. [x] Do the search based on paths that are available at any given time give the set of keys player possesses
+    4. [ ] Profit
 
     */
 
     struct game game = game_load("day18_input.txt");
-    //game_print(&game);
+    game_print(&game);
     //game_print_all_paths(&game);
 
-    // Find any path that's valid
-
-    char path[MAX_KEYS_AND_DOORS + 2] = {0}; // keys we collected in order
-    size_t path_len = 0;
-
-    char keys[MAX_KEYS_AND_DOORS + 1] = {0}; // keys we stil need
-    size_t keys_len = 0;
-
-    path[path_len++] = '@';
-
-    for (char key = 'a'; key <= 'z'; ++key)
-    {
-        if (game_get_precomputed_path(&game, '@', key)->len)
-        {
-            keys[keys_len++] = key;
-        }
-    }
-
-    // This path is open and has the right length, now we just have to generate it.
-    //
-    const char *test_path = "@afbjgnhdloepcikm";
-    printf("%s %d\n",
-           is_path_open(&game, test_path, strlen(test_path)) ? "open" : "closed",
-           get_path_length(&game, test_path, strlen(test_path)));
-    exit(0);
-
-    printf("Path: %s\n", path);
-    printf("Keys: %s\n", keys);
-
-    while (keys[0]) // while we still need a key
-    {
-        char current = path[path_len - 1];
-
-        for (char *key = keys; key; ++key)
-        {
-            if (*key == current)
-            {
-                continue;
-            }
-
-            struct path *precomp_path = game_get_precomputed_path(&game, current, *key);
-
-            bool open = true;
-            for (int i = 0; i < precomp_path->doors_len; ++i)
-            {
-                char key = tolower(precomp_path->doors[i]);
-                if (strchr(path, key) == NULL)
-                {
-                    open = false;
-                    break;
-                }
-            }
-
-            //printf("%c -> %c %s\n", current, *key, open ? "open" : "closed");
-
-            if (open)
-            {
-                // Add the key to path
-
-                assert(path_len < MAX_KEYS_AND_DOORS + 1);
-                path[path_len++] = *key;
-
-                // Pop the key from keys
-
-                *key = keys[--keys_len];
-                keys[keys_len] = '\0';
-
-                break;
-            }
-        }
-    }
-
-    printf("---\n");
-    printf("Path: %s\n", path);
-    printf("Keys: %s\n", keys);
-
-    // stuff above works
-
-    // Swap letters on the path while it becomes shorter and still valid
-
-    // NOTE: I may have to test out paths of equal length too
-
-    // TODO: Check if the path given in the example solution could be computed by the system (do we find it valid), if yes, use a different permutation thing
-
-    bool done = false;
-    int best_length = get_path_length(&game, path, path_len);
-    while (!done)
-    {
-        done = true;
-
-        for (int i = 1; i < path_len; ++i) // the index of the character
-        {
-            for (int j = 1; j < path_len; ++j) // the index of place to insert the character
-            {
-                if (i == j)
-                {
-                    continue;
-                }
-
-                // Modify the path
-
-                char new_path[MAX_KEYS_AND_DOORS + 2] = {0};
-                int new_path_len = 0;
-                for (int k = 0; k < path_len; ++k)
-                {
-                    if (i < j) // we will take this character out first
-                    {
-                        if (k != i)
-                        {
-                            new_path[new_path_len++] = path[k];
-                        }
-                        if (k == j)
-                        {
-                            new_path[new_path_len++] = path[i];
-                        }
-                    }
-                    else
-                    {
-                        if (k == j)
-                        {
-                            new_path[new_path_len++] = path[i];
-                        }
-                        if (k != i)
-                        {
-                            new_path[new_path_len++] = path[k];
-                        }
-                    }
-                }
-
-                // Check if new path is open
-
-                if (!is_path_open(&game, new_path, path_len))
-                {
-                    continue;
-                }
-
-                // Check if new path is better
-
-                int new_length = get_path_length(&game, new_path, path_len);
-                if (new_length < best_length)
-                {
-                    printf("New best path: %s (%d)\n", new_path, new_length);
-
-                    memcpy(path, new_path, path_len);
-                    best_length = new_length;
-                    done = false;
-                    break;
-                }
-            }
-        }
-    }
-
-    printf("---\n");
-    printf("Best path: %s\n", path);
-    printf("Length: %d\n", best_length);
+    struct game best_game = find_shortest_path_to_collect_all_keys(&game);
+    game_print_taken_paths(&best_game);
+    printf("Shortest path: %d\n", best_game.distance);
 }
