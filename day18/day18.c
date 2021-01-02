@@ -26,7 +26,7 @@
 #define MAX_PATH 1024
 #define MAX_PATH_FIND_OPEN_SET 128
 #define MAX_PATH_FIND_CAME_FROM 128
-#define MAX_GAMES 8192
+#define MAX_GAMES (8192 * 2)
 
 struct position
 {
@@ -369,6 +369,23 @@ void game_print_all_paths(struct game *game)
     }
 }
 
+void game_print_all_paths_starting_at(struct game *game, char from_key_or_entrance)
+{
+    for (char key = 'a'; key <= 'z'; ++key)
+    {
+        if (from_key_or_entrance == key)
+        {
+            continue;
+        }
+
+        struct path *path = game_get_precomputed_path(game, from_key_or_entrance, key);
+        if (path->len > 0)
+        {
+            game_print_path(game, path);
+        }
+    }
+}
+
 void game_print_taken_paths(struct game *game)
 {
     printf("Taken paths:\n");
@@ -478,6 +495,8 @@ struct game game_load(const char *path)
     return game;
 }
 
+//
+
 int get_path_length(struct game *game, const char *path, size_t path_len)
 {
     int length = 0;
@@ -508,7 +527,124 @@ bool is_path_open(struct game *game, const char *path, size_t path_len)
     return true;
 }
 
-//
+struct simulation
+{
+    char path[MAX_KEYS_AND_DOORS + 2]; // + '@' + '\0'
+    size_t path_len;
+    char keys[MAX_KEYS_AND_DOORS + 1]; // + '\0'
+    size_t keys_len;
+};
+
+int find_shortest_path(struct game *game, const char *keys, size_t keys_len)
+{
+    struct simulation sims[MAX_GAMES] = {0};
+    size_t sims_len = 0;
+
+    struct simulation best_sim = {0};
+    int best_sim_len = INT_MAX;
+
+    sims[sims_len++] = (struct simulation){
+        .path = "@",
+        .path_len = 1,
+        .keys = "",
+        .keys_len = keys_len,
+    };
+    memcpy(sims[0].keys, keys, keys_len);
+
+    int iterations = 0;
+
+    while (sims_len)
+    {
+        struct simulation current = sims[--sims_len];
+        char last_path_key = current.path[current.path_len - 1];
+
+        // printf("Path: %s\n", current.path);
+        // printf("Keys: %s\n", current.keys);
+        // printf("---");
+
+        // Get keys that we CAN put in the next position
+
+        char next_keys[MAX_KEYS_AND_DOORS + 1] = {0};
+        size_t next_keys_len = 0;
+
+        for (char *key = current.keys; *key; ++key)
+        {
+            struct path *precomp_path = game_get_precomputed_path(game, last_path_key, *key);
+            assert(precomp_path->len);
+
+            bool open = true;
+            for (size_t i = 0; i < precomp_path->doors_len; ++i)
+            {
+                char door_key = tolower(precomp_path->doors[i]);
+
+                if (strchr(current.path, door_key) == NULL)
+                {
+                    open = false;
+                    break;
+                }
+            }
+
+            if (open)
+            {
+                assert(next_keys_len < MAX_KEYS_AND_DOORS);
+                next_keys[next_keys_len++] = *key;
+            }
+        }
+
+        // Finish this simulation or spawn next ones
+
+        if (next_keys_len == 0)
+        {
+            int sim_len = get_path_length(game, current.path, current.path_len);
+            if (sim_len < best_sim_len)
+            {
+                best_sim = current;
+                best_sim_len = sim_len;
+            }
+        }
+        else
+        {
+            for (char *key = next_keys; *key; ++key)
+            {
+                // Create new sim
+                struct simulation next_sim = current;
+
+                // Push key to path
+                assert(next_sim.path_len < MAX_KEYS_AND_DOORS + 1);
+                next_sim.path[next_sim.path_len++] = *key;
+
+                int sim_len = get_path_length(game, next_sim.path, next_sim.path_len);
+                if (sim_len < best_sim_len)
+                {
+                    // Pop key from keys
+                    char *pop_key = strchr(next_sim.keys, *key);
+                    assert(pop_key);
+                    *pop_key = next_sim.keys[next_sim.keys_len - 1];
+                    next_sim.keys[--next_sim.keys_len] = '\0';
+
+                    // Push sim
+                    assert(sims_len < MAX_GAMES);
+                    sims[sims_len++] = next_sim;
+                }
+            }
+        }
+
+        //
+        // BREAK UNTIL END OF BRUTE FORCE AT AROUND 2 BILLION ITERATIONS <----------------------------
+        //
+
+        if (iterations % 5000000 == 0)
+        {
+            printf("%d: path=%s, len=%d\n", iterations, best_sim.path, best_sim_len);
+        }
+
+        ++iterations;
+    }
+
+    printf("Done: path=%s, len=%d\n", best_sim.path, best_sim_len);
+
+    return best_sim_len;
+}
 
 int main(void)
 {
@@ -522,6 +658,7 @@ int main(void)
     struct game game = game_load("day18_input.txt");
     //game_print(&game);
     //game_print_all_paths(&game);
+    game_print_all_paths_starting_at(&game, '@');
 
     // Find any path that's valid
 
@@ -541,12 +678,16 @@ int main(void)
         }
     }
 
-    // This path is open and has the right length, now we just have to generate it.
-    //
-    const char *test_path = "@afbjgnhdloepcikm";
-    printf("%s %d\n",
-           is_path_open(&game, test_path, strlen(test_path)) ? "open" : "closed",
-           get_path_length(&game, test_path, strlen(test_path)));
+    // // This path is open and has the right length, now we just have to generate it.
+    // //
+    // const char *test_path = "@afbjgnhdloepcikm";
+    // printf("%s %d\n",
+    //        is_path_open(&game, test_path, strlen(test_path)) ? "open" : "closed",
+    //        get_path_length(&game, test_path, strlen(test_path)));
+    // exit(0);
+
+    int shortest_path = find_shortest_path(&game, keys, keys_len);
+    printf("Shortest path: %d\n", shortest_path);
     exit(0);
 
     printf("Path: %s\n", path);
