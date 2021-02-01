@@ -8,5 +8,18 @@
     "files.associations": {
         "*.C": "c",
         "*.H": "c"
+    },
+    "files.exclude": {
+        "**/.git": true,
+        "**/.svn": true,
+        "**/.hg": true,
+        "**/CVS": true,
+        "**/.DS_Store": true,
+
+        // MSVC builds
+        "**/*.exe": true,
+        "**/*.ilk": true,
+        "**/*.pdb": true,
+        "**/*.obj": true
     }
 }

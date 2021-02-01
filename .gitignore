@@ -1,1 +1,7 @@
 .DS_Store
+
+# MSVC builds
+*.exe
+*.ilk
+*.pdb
+*.obj
