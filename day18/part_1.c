@@ -9,69 +9,41 @@
  * Take 4:      01 Feb 2021 Taipei
  **/
 
+#define TABLE_IMPL
+
+#include "table.h"
 #include <stdio.h>
-
-//
-// TABLES
-//
-
-typedef struct TableKey
-{
-    const char *string;
-} TableKey;
-
-typedef struct TableValue
-{
-    void *value;
-} TableValue;
-
-/**
- * A table is both a dynamic array / vector, a dictionary, and a set.
- *
- * Examples:
- *
- * Table *my_table = table_create();
- *
- * table_insert(my_table, "Value 1", some_value);
- * table_insert(my_table, 0, some_value);
- * table_insert(my_table, TABLE_END, some_value);
- *
- * table_remove(my_table, "Value 1");
- * table_remove(my_table, 0);
- * table_remove(my_table, TABLE_END);
- *
- * SomeValue *value = table_get(my_table, "Value 1", SomeValue);
- * SomeValue *value = table_get(my_table, 0, SomeValue);
- * SomeValue *value = table_get(my_table, TABLE_END, SomeValue);
- *
- * table_set(my_table, "Value 1", some_value);
- * table_set(my_table, 0, some_value);
- * table_set(my_table, TABLE_END, some_value);
- *
- * for (size_t index = 0; index < table_size(my_table); ++index)
- * {
- *     SomeValue *value = table_get(my_table, index, SomeValue);
- * }
- *
- * for (size_t index = 0; index < table_size(my_table); ++index)
- * {
- *     SomeValue *value = table_get(my_table, table_key(index), SomeValue);
- * }
- **/
-typedef struct Table
-{
-    TableKey *keys;
-    TableValue *values;
-    size_t size;
-    size_t capacity;
-} Table;
-
-//
-// A-STAR
-//
 
 int main()
 {
-    const char *str = "Hello";
-    printf("%s\n", str);
+    Table *table = table_create(64);
+
+    table_set(table, "a1", "1", 2);
+    table_set(table, "b2", "2", 2);
+    table_set(table, "c3", "3", 2);
+    table_set(table, "d4", "4", 2);
+    table_set(table, "e5", "5", 2);
+    table_set(table, "f6", "6", 2);
+    table_set(table, "g6", "7", 2);
+    table_set(table, "h7", "8", 2);
+    table_set(table, "i8", "9", 2);
+
+    for (size_t i = 0; i < table->size; ++i)
+    {
+        TableEntry *entry = table->entries[i];
+        while (entry)
+        {
+            printf("%zu: %s -> %s\n", i, entry->key, (char *)entry->value);
+            entry = entry->next;
+        }
+    }
+
+    printf("-----\n");
+
+    for (TableEntry *entry = table_next(table, NULL);
+         entry;
+         entry = table_next(table, entry))
+    {
+        printf("%s: %s\n", entry->key, (char *)entry->value);
+    }
 }
