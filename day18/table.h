@@ -5,6 +5,34 @@
 #include <stdlib.h>
 #include <string.h>
 
+/**
+ * Usage:
+ *
+ * Table *table = table_create(8);
+ *
+ * table_set(table, "a1", "1", 2);
+ * table_set(table, "b2", "2", 2);
+ * table_set(table, "c3", "3", 2);
+ * table_set(table, "d4", "4", 2);
+ *
+ * printf("a1 -> %s\n", (char *)table_get(table, "a1"));
+ * printf("b2 -> %s\n", (char *)table_get(table, "b2"));
+ * printf("c3 -> %s\n", (char *)table_get(table, "c3"));
+ * printf("d4 -> %s\n", (char *)table_get(table, "d4"));
+ *
+ * for (TableEntry *entry = table_next(table, NULL);
+ *      entry;
+ *      entry = table_next(table, entry))
+ * {
+ *     printf("%s -> %s\n", entry->key, (char *)entry->value);
+ * }
+ *
+ * table_destroy(table);
+ **/
+
+struct TableEntry;
+struct Table;
+
 typedef struct TableEntry TableEntry;
 typedef struct Table Table;
 
@@ -171,32 +199,36 @@ void *table_get(Table *table, const char *key)
 
 TableEntry *table_next(Table *table, TableEntry *previous)
 {
-    if (previous)
+    if (!previous)
     {
+        // Grab the first entry in the first bin
+
+        for (size_t i = 0; i < table->size; ++i)
+        {
+            if (table->entries[i])
+            {
+                return table->entries[i];
+            }
+        }
+    }
+    else
+    {
+        // Grab the next entry in the same bin if it exists; else grab the first entry in the next bin
+
         if (previous->next)
         {
             return previous->next;
         }
         else
         {
-            size_t previous_bin = table_hash(previous->key) % table->size;
+            size_t bin = table_hash(previous->key) % table->size;
 
-            for (size_t i = previous_bin + 1; i < table->size; ++i)
+            for (size_t i = bin + 1; i < table->size; ++i)
             {
                 if (table->entries[i])
                 {
                     return table->entries[i];
                 }
-            }
-        }
-    }
-    else
-    {
-        for (size_t i = 0; i < table->size; ++i)
-        {
-            if (table->entries[i])
-            {
-                return table->entries[i];
             }
         }
     }

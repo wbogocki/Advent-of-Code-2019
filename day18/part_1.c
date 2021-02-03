@@ -9,41 +9,33 @@
  * Take 4:      01 Feb 2021 Taipei
  **/
 
+#define ARRAY_IMPL
 #define TABLE_IMPL
 
+#include "array.h"
 #include "table.h"
 #include <stdio.h>
 
 int main()
 {
-    Table *table = table_create(64);
+    char a[40] = "Hello";
+    char b[40] = "There";
+    char c[40] = "Stream";
 
-    table_set(table, "a1", "1", 2);
-    table_set(table, "b2", "2", 2);
-    table_set(table, "c3", "3", 2);
-    table_set(table, "d4", "4", 2);
-    table_set(table, "e5", "5", 2);
-    table_set(table, "f6", "6", 2);
-    table_set(table, "g6", "7", 2);
-    table_set(table, "h7", "8", 2);
-    table_set(table, "i8", "9", 2);
+    Array *array = array_create(40, 0);
 
-    for (size_t i = 0; i < table->size; ++i)
+    array_push(array, a);
+    array_push(array, b);
+    array_push(array, c);
+
+    array_set(array, 1, c);
+
+    array_pop(array, NULL);
+
+    for (size_t i = 0; i < array_size(array); ++i)
     {
-        TableEntry *entry = table->entries[i];
-        while (entry)
-        {
-            printf("%zu: %s -> %s\n", i, entry->key, (char *)entry->value);
-            entry = entry->next;
-        }
+        printf("%zu: %s\n", i, (char *)array_get(array, i));
     }
 
-    printf("-----\n");
-
-    for (TableEntry *entry = table_next(table, NULL);
-         entry;
-         entry = table_next(table, entry))
-    {
-        printf("%s: %s\n", entry->key, (char *)entry->value);
-    }
+    array_destroy(array);
 }

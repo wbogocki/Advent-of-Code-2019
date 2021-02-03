@@ -5,6 +5,7 @@
         "HMAP_IMPL",
         "HMAP_TEST"
     ],
+    "C_Cpp.dimInactiveRegions": false,
     "files.associations": {
         "*.C": "c",
         "*.H": "c"
