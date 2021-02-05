@@ -124,6 +124,11 @@ size_t array_size(Array *array)
     return array->size;
 }
 
+void array_qsort(Array *array, int (*cmp)(const void *, const void *))
+{
+    qsort(array->data, array->size, array->element_size, cmp);
+}
+
 #endif
 
 #endif
