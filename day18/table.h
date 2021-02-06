@@ -55,7 +55,7 @@ void table_destroy(Table *table);
 void *table_set(Table *table, const char *key, void *value, size_t value_size);
 void table_unset(Table *table, const char *key);
 void *table_get(Table *table, const char *key);
-void *table_get_default(Table *table, const char *key, void *default);
+void *table_get_default(Table *table, const char *key, void *def);
 TableEntry *table_next(Table *table, TableEntry *previous);
 bool table_empty(Table *table);
 
@@ -215,10 +215,10 @@ void *table_get(Table *table, const char *key)
     return NULL;
 }
 
-void *table_get_default(Table *table, const char *key, void *default)
+void *table_get_default(Table *table, const char *key, void *def)
 {
     void *value = table_get(table, key);
-    return value ? value : default;
+    return value ? value : def;
 }
 
 TableEntry *table_next(Table *table, TableEntry *previous)

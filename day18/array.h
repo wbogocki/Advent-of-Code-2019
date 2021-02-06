@@ -2,6 +2,7 @@
 #define __ARRAY_H__
 
 #include <assert.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -47,6 +48,7 @@ void *array_get(Array *array, size_t index);
 void *array_push(Array *array, void *element);
 void array_pop(Array *array, void *element);
 size_t array_size(Array *array);
+bool array_contains(Array *array, void *element);
 
 #ifdef ARRAY_IMPL
 
@@ -127,6 +129,19 @@ size_t array_size(Array *array)
 void array_qsort(Array *array, int (*cmp)(const void *, const void *))
 {
     qsort(array->data, array->size, array->element_size, cmp);
+}
+
+bool array_contains(Array *array, void *element)
+{
+    for (size_t i = 0; i < array->size; ++i)
+    {
+        if (memcmp(array_get(array, i), element, array->element_size) == 0)
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 #endif
