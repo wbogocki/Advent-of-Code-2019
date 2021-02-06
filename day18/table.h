@@ -2,6 +2,7 @@
 #define __TABLE_H__
 
 #include <assert.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -52,8 +53,11 @@ struct Table
 Table *table_create(size_t size);
 void table_destroy(Table *table);
 void *table_set(Table *table, const char *key, void *value, size_t value_size);
+void table_unset(Table *table, const char *key);
 void *table_get(Table *table, const char *key);
+void *table_get_default(Table *table, const char *key, void *default);
 TableEntry *table_next(Table *table, TableEntry *previous);
+bool table_empty(Table *table);
 
 #ifdef TABLE_IMPL
 
@@ -182,6 +186,20 @@ void *table_set(Table *table, const char *key, void *value, size_t value_size)
     }
 }
 
+void table_unset(Table *table, const char *key)
+{
+    size_t bin = table_hash(key) % table->size;
+
+    for (TableEntry **next = &table->entries[bin]; *next; next = &(*next)->next)
+    {
+        if (strcmp((*next)->key, key) == 0)
+        {
+            *next = table_entry_destroy(*next);
+            break;
+        }
+    }
+}
+
 void *table_get(Table *table, const char *key)
 {
     size_t bin = table_hash(key) % table->size;
@@ -195,6 +213,12 @@ void *table_get(Table *table, const char *key)
     }
 
     return NULL;
+}
+
+void *table_get_default(Table *table, const char *key, void *default)
+{
+    void *value = table_get(table, key);
+    return value ? value : default;
 }
 
 TableEntry *table_next(Table *table, TableEntry *previous)
@@ -234,6 +258,11 @@ TableEntry *table_next(Table *table, TableEntry *previous)
     }
 
     return NULL;
+}
+
+bool table_empty(Table *table)
+{
+    return table_next(table, NULL) == NULL;
 }
 
 #endif
