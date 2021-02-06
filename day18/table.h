@@ -221,6 +221,8 @@ void *table_get_default(Table *table, const char *key, void *def)
     return value ? value : def;
 }
 
+// NOTE: This is very slow for large tables because it has to check every bin one by one,
+// a better approach would be to store a list of bins that contain values.
 TableEntry *table_next(Table *table, TableEntry *previous)
 {
     if (!previous)

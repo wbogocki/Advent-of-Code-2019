@@ -144,6 +144,27 @@ bool array_contains(Array *array, void *element)
     return false;
 }
 
+void array_reverse(Array *array)
+{
+    if (array->size > 0)
+    {
+        size_t left = 0;
+        size_t right = array->size - 1;
+
+        void *temp = malloc(array->element_size);
+        assert(temp);
+
+        while (left < right)
+        {
+            memcpy(temp, array_get(array, left), array->element_size);
+            memcpy(array_get(array, left++), array_get(array, right), array->element_size);
+            memcpy(array_get(array, right--), temp, array->element_size);
+        }
+
+        free(temp);
+    }
+}
+
 #endif
 
 #endif

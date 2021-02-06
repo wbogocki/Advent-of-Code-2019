@@ -112,14 +112,19 @@ void board_print(Board *board)
 }
 
 //
-// PATH FINDING
+// PATH
 //
+// Shortest path between two points on the map given a set of keys.
+//
+
+// Too big and iteration becomes slow, too small and lookups become slow
+#define PATH_TABLE_SIZE 64
 
 struct PathNode
 {
     Vector pos;
-    Board *board;
-    Array *keys;
+    Board *board; // unowned
+    Array *keys;  // unowned
 };
 
 typedef struct PathNode PathNode;
@@ -165,26 +170,22 @@ bool path_is_goal(PathNode *node, Vector goal)
     return node->pos.x == goal.x && node->pos.y == goal.y;
 }
 
-// The reconstructed path will be backwards starting from the target node
 Array *path_reconstruct(Table *came_from, PathNode *current)
 {
     Array *total_path = array_create(sizeof(PathNode), 0);
     assert(total_path);
 
-    while (true)
+    while (current)
     {
+        array_push(total_path, current);
+
         char *key = path_table_key(current);
         current = table_get(came_from, key);
         free(key);
-        if (current)
-        {
-            array_push(total_path, current);
-        }
-        else
-        {
-            break;
-        }
     }
+
+    array_pop(total_path, NULL); // pop the starting node
+    array_reverse(total_path);
 
     return total_path;
 }
@@ -243,19 +244,19 @@ Array *path_find(PathNode start, Vector goal)
     char *key = path_table_key(&start);
 
     // Init open set
-    Table *open_set = table_create(1024 * 1024);
+    Table *open_set = table_create(PATH_TABLE_SIZE);
     table_set(open_set, key, &start, sizeof(PathNode));
 
     // Init come-from set
-    Table *came_from = table_create(1024 * 1024);
+    Table *came_from = table_create(PATH_TABLE_SIZE);
 
     // Init g-score set
-    Table *g_score = table_create(1024 * 1024);
+    Table *g_score = table_create(PATH_TABLE_SIZE);
     int score = 0;
     table_set(g_score, key, &score, sizeof(int));
 
     // Init f-score set
-    Table *f_score = table_create(1024 * 1024);
+    Table *f_score = table_create(PATH_TABLE_SIZE);
     int h = path_heuristic(&start, goal);
     table_set(f_score, key, &h, sizeof(int));
 
@@ -274,6 +275,12 @@ Array *path_find(PathNode start, Vector goal)
             free(current_key);
 
             out = path_reconstruct(came_from, &current);
+
+            // Double check
+            PathNode *last_node = array_get(out, array_size(out) - 1);
+            assert(last_node->pos.x == goal.x && last_node->pos.y == goal.y &&
+                   "The path ends on the desired tile!");
+
             goto cleanup;
         }
 
@@ -324,25 +331,33 @@ cleanup:
 }
 
 //
-// PLAYER
+// SEQUENCE
+//
+// Shortest key order to complete the labyrinth in.
 //
 
-struct Player
+// Too big and iteration becomes slow, too small and lookups become slow
+#define SEQ_TABLE_SIZE 64
+
+struct SeqNode
 {
-    Board *board;
-    Array *keys_owned;
-    Array *keys_not_owned;
+    Board *board;          // unowned
+    Array *keys_owned;     // owned
+    Array *keys_not_owned; // owned
     Vector pos;
+    char tile;          // current tile
+    int distance;       // distance travelled from the previous node
+    int total_distance; // distance travelled from the first node
 };
 
-typedef struct Player Player;
+typedef struct SeqNode SeqNode;
 
-Player *player_create(Board *board)
+SeqNode *seq_node_first(Board *board)
 {
-    Array *keys_owned = array_create(sizeof(char), 36);
+    Array *keys_owned = array_create(sizeof(char), 26);
     assert(keys_owned);
 
-    Array *keys_not_owned = array_create(sizeof(char), 36);
+    Array *keys_not_owned = array_create(sizeof(char), 26);
     assert(keys_not_owned);
 
     Vector pos = {0};
@@ -364,56 +379,79 @@ Player *player_create(Board *board)
         }
     }
 
-    Player *player = malloc(sizeof(Player));
-    assert(player);
+    SeqNode *node = malloc(sizeof(SeqNode));
+    assert(node);
 
-    *player = (Player){
+    *node = (SeqNode){
         .board = board,
         .keys_owned = keys_owned,
         .keys_not_owned = keys_not_owned,
         .pos = pos,
+        .tile = '@',
+        .distance = 0,
+        .total_distance = 0,
     };
 
-    return player;
+    return node;
 }
 
-void player_destroy(Player *player)
+void seq_node_destroy(SeqNode *node)
 {
     // The board data is unowned so don't destory it
-    array_destroy(player->keys_not_owned);
-    array_destroy(player->keys_owned);
+    array_destroy(node->keys_not_owned);
+    array_destroy(node->keys_owned);
 }
 
-Player *player_clone(Player *player)
+SeqNode *seq_node_neighbor(SeqNode *node, Vector new_pos, char new_key, int distance)
 {
-    Player *out = player_create(player->board);
+    Array *keys_owned = array_create(sizeof(char), 26);
+    assert(keys_owned);
 
-    for (int i = 0; i < array_size(player->keys_owned); ++i)
+    Array *keys_not_owned = array_create(sizeof(char), 26);
+    assert(keys_not_owned);
+
+    for (int i = 0; i < array_size(node->keys_owned); ++i)
     {
-        char key = *(char *)array_get(player->keys_owned, i);
-        array_push(out->keys_owned, &key);
+        char key = *(char *)array_get(node->keys_owned, i);
+        array_push(keys_owned, &key);
     }
 
-    for (int i = 0; i < array_size(player->keys_not_owned); ++i)
+    array_push(keys_owned, &new_key);
+
+    for (int i = 0; i < array_size(node->keys_not_owned); ++i)
     {
-        char key = *(char *)array_get(player->keys_not_owned, i);
-        array_push(out->keys_not_owned, &key);
+        char key = *(char *)array_get(node->keys_not_owned, i);
+        if (key != new_key)
+        {
+            array_push(keys_not_owned, &key);
+        }
     }
 
-    out->pos = player->pos;
+    SeqNode *out = malloc(sizeof(SeqNode));
+    assert(out);
+
+    *out = (SeqNode){
+        .board = node->board,
+        .keys_owned = keys_owned,
+        .keys_not_owned = keys_not_owned,
+        .pos = new_pos,
+        .tile = new_key,
+        .distance = distance,
+        .total_distance = node->total_distance + distance,
+    };
 
     return out;
 }
 
-void player_print(Player *player)
+void seq_node_print(SeqNode *node)
 {
-    printf("Position:\t(%zu, %zu)\n", player->pos.x, player->pos.y);
+    printf("Position:\t(%zu, %zu)\n", node->pos.x, node->pos.y);
 
     printf("Keys owned:\t[");
-    for (size_t i = 0; i < array_size(player->keys_owned); ++i)
+    for (size_t i = 0; i < array_size(node->keys_owned); ++i)
     {
-        putchar(*(char *)array_get(player->keys_owned, i));
-        if (i != array_size(player->keys_owned) - 1)
+        putchar(*(char *)array_get(node->keys_owned, i));
+        if (i != array_size(node->keys_owned) - 1)
         {
             printf(", ");
         }
@@ -421,10 +459,10 @@ void player_print(Player *player)
     printf("]\n");
 
     printf("Keys not owned:\t[");
-    for (size_t i = 0; i < array_size(player->keys_not_owned); ++i)
+    for (size_t i = 0; i < array_size(node->keys_not_owned); ++i)
     {
-        putchar(*(char *)array_get(player->keys_not_owned, i));
-        if (i != array_size(player->keys_not_owned) - 1)
+        putchar(*(char *)array_get(node->keys_not_owned, i));
+        if (i != array_size(node->keys_not_owned) - 1)
         {
             printf(", ");
         }
@@ -451,19 +489,214 @@ int char_cmp(const void *a, const void *b)
     }
 }
 
-// NOTE: Has the side effect of sorting the player->keys_owned array.
-char *player_table_key(Player *player)
+// NOTE: Has the side effect of sorting the node->keys_owned array.
+char *seq_table_key(SeqNode *node)
 {
     size_t buf_size = 64;
     char *buf = calloc(buf_size, sizeof(char));
+    assert(buf);
 
-    array_qsort(player->keys_owned, char_cmp);
+    array_qsort(node->keys_owned, char_cmp);
 
-    assert(array_size(player->keys_owned) <= INT_MAX);
-    snprintf(buf, buf_size, "%zu,%zu,%*s", player->pos.x, player->pos.y,
-             (int)array_size(player->keys_owned), (char *)player->keys_owned->data);
+    assert(array_size(node->keys_owned) <= INT_MAX);
+    snprintf(buf, buf_size, "%zu,%zu,%*s", node->pos.x, node->pos.y,
+             (int)array_size(node->keys_owned), (char *)node->keys_owned->data);
 
     return buf;
+}
+
+int seq_heuristic(SeqNode *node)
+{
+    // TODO: This is not the right heuristic, the right heuristic would be something
+    // that correlates with distance to all other keys left
+
+    int keys_owned = array_size(node->keys_owned);
+    int keys_not_owned = array_size(node->keys_not_owned);
+
+    int avg_dist = 150; // magic number
+
+    int dist_rem = avg_dist * keys_not_owned;
+
+    return dist_rem;
+}
+
+// The distance required to go to this node from the previous one
+int seq_distance(SeqNode *node)
+{
+    return node->distance;
+}
+
+// The returned key needs to be freed
+char *seq_next_node(Table *open_set, Table *f_score)
+{
+    int best_score = INT_MAX;
+    char *best_node = NULL;
+
+    for (TableEntry *entry = table_next(open_set, NULL);
+         entry;
+         entry = table_next(open_set, entry))
+    {
+        int score = *(int *)table_get(f_score, entry->key);
+        if (score < best_score)
+        {
+            best_score = score;
+            best_node = entry->key;
+        }
+    }
+
+    return strdup(best_node);
+}
+
+bool seq_is_goal(SeqNode *node)
+{
+    return array_size(node->keys_not_owned) == 0;
+}
+
+// The reconstructed path will be backwards starting from the target node
+Array *seq_reconstruct(Table *came_from, SeqNode *current)
+{
+    Array *total_path = array_create(sizeof(SeqNode *), 0);
+    assert(total_path);
+
+    while (current)
+    {
+        array_push(total_path, &current);
+
+        char *key = seq_table_key(current);
+
+        // printf("%s\n", key);
+
+        SeqNode **current_ptr = (SeqNode **)table_get(came_from, key);
+        current = current_ptr
+                      ? *current_ptr
+                      : NULL;
+        free(key);
+    }
+
+    array_pop(total_path, NULL); // pop the starting node
+    array_reverse(total_path);
+
+    return total_path;
+}
+
+Array *seq_neighbors(SeqNode *node)
+{
+    Array *out = array_create(sizeof(SeqNode *), 0);
+
+    PathNode start = {
+        .board = node->board,
+        .keys = node->keys_owned,
+        .pos = node->pos,
+    };
+
+    for (size_t i = 0; i < array_size(node->keys_not_owned); ++i)
+    {
+        char key[] = {*(char *)array_get(node->keys_not_owned, i), '\0'};
+        Vector key_pos = *(Vector *)table_get(node->board->keys, key);
+
+        Array *path = path_find(start, key_pos);
+        if (path)
+        {
+            PathNode *path_last = (PathNode *)array_get(path, array_size(path) - 1);
+            int distance = array_size(path);
+            Vector new_pos = path_last->pos;
+            array_destroy(path);
+
+            SeqNode *neighbor = seq_node_neighbor(node, new_pos, key[0], distance);
+            array_push(out, &neighbor);
+        }
+    }
+
+    return out;
+}
+
+Array *seq_find(SeqNode *start)
+{
+    char *key = seq_table_key(start);
+
+    // Init open set
+    Table *open_set = table_create(SEQ_TABLE_SIZE);
+    table_set(open_set, key, &start, sizeof(SeqNode *));
+
+    // Init come-from set
+    Table *came_from = table_create(SEQ_TABLE_SIZE);
+
+    // Init g-score set
+    Table *g_score = table_create(SEQ_TABLE_SIZE);
+    int score = 0;
+    table_set(g_score, key, &score, sizeof(int));
+
+    // Init f-score set
+    Table *f_score = table_create(SEQ_TABLE_SIZE);
+    int h = seq_heuristic(start);
+    table_set(f_score, key, &h, sizeof(int));
+
+    free(key);
+
+    // Find the path
+    Array *out = NULL;
+    while (!table_empty(open_set))
+    {
+        char *current_key = seq_next_node(open_set, f_score);
+
+        SeqNode *current = *(SeqNode **)table_get(open_set, current_key);
+
+        if (seq_is_goal(current))
+        {
+            free(current_key);
+
+            out = seq_reconstruct(came_from, current);
+            goto cleanup;
+        }
+
+        table_unset(open_set, current_key);
+
+        Array *neighbors = seq_neighbors(current);
+        for (size_t i = 0; i < array_size(neighbors); ++i)
+        {
+            SeqNode *neighbor = *(SeqNode **)array_get(neighbors, i);
+            char *neighbor_key = seq_table_key(neighbor);
+
+            // printf("%s\n", neighbor_key);
+
+            int infinity = 9999;
+            int g_score_current = *(int *)table_get_default(g_score, current_key, &infinity);
+            int g_score_neighbor = *(int *)table_get_default(g_score, neighbor_key, &infinity);
+
+            int distance = seq_distance(neighbor);
+
+            int tentative_score = g_score_current + distance;
+
+            if (tentative_score < g_score_neighbor)
+            {
+                int f_score_neighbor = g_score_neighbor + seq_heuristic(neighbor);
+
+                table_set(came_from, neighbor_key, &current, sizeof(SeqNode *));
+                table_set(g_score, neighbor_key, &tentative_score, sizeof(int));
+                table_set(f_score, neighbor_key, &f_score_neighbor, sizeof(int));
+
+                // Unlike in normal A* implementation we need to update the open-set element as well
+                // because we're using it to store information that can change for the "same" not key-
+                // wise that has been reached faster by another path.
+                table_set(open_set, neighbor_key, &neighbor, sizeof(SeqNode *));
+            }
+
+            free(neighbor_key);
+        }
+        array_destroy(neighbors);
+
+        free(current_key);
+    }
+
+cleanup:
+    // We will leak a ton of node memory here, whatever...
+
+    table_destroy(f_score);
+    table_destroy(g_score);
+    table_destroy(came_from);
+    table_destroy(open_set);
+
+    return out;
 }
 
 int main()
@@ -473,39 +706,27 @@ int main()
 
     // board_print(board);
 
-    Player *player = player_create(board);
-    assert(player);
+    SeqNode *first = seq_node_first(board);
+    assert(first);
 
-    // player_print(player);
+    // seq_node_print(first);
 
-    // A*
+    Array *path = seq_find(first);
 
-    PathNode start = {
-        .board = board,
-        .keys = array_create(sizeof(char), 0),
-        .pos = player->pos,
-    };
-
-    const char *key = "q";
-    Vector key_pos = *(Vector *)table_get(board->keys, key);
-    Array *path = path_find(start, key_pos);
-
-    if (path)
+    printf("Path:\t");
+    for (size_t i = 0; i < array_size(path); ++i)
     {
-        printf("Path:\t[");
-        for (size_t i = 0; i < array_size(path); ++i)
+        SeqNode *node = *(SeqNode **)array_get(path, i);
+        printf("%c,%d", node->tile, node->distance);
+        if (i != array_size(path) - 1)
         {
-            PathNode node = *(PathNode *)array_get(path, i);
-            printf("%zu,%zu", node.pos.x, node.pos.y);
-            if (i != array_size(path) - 1)
-            {
-                printf(" -> ");
-            }
+            printf(" -> ");
         }
-        printf("]\n");
     }
-    else
-    {
-        printf("Path:\tnull");
-    }
+    printf("\n");
+
+    printf("Steps:\t%zu\n", array_size(path));
+
+    SeqNode *last_node = *(SeqNode **)array_get(path, array_size(path) - 1);
+    printf("Dist:\t%d\n", last_node->total_distance);
 }
