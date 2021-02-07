@@ -21,6 +21,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+// Too big and iteration becomes slow, too small and lookups become slow
+#define TABLE_SIZE (1024)
+
 //
 // VECTOR
 //
@@ -116,9 +119,6 @@ void board_print(Board *board)
 //
 // Shortest path between two points on the map given a set of keys.
 //
-
-// Too big and iteration becomes slow, too small and lookups become slow
-#define PATH_TABLE_SIZE (8 * 1024)
 
 struct PathNode
 {
@@ -251,19 +251,19 @@ Array *path_find(PathNode start, Vector goal)
     char *key = path_table_key(&start);
 
     // Init open set
-    Table *open_set = table_create(PATH_TABLE_SIZE);
+    Table *open_set = table_create(TABLE_SIZE);
     table_set(open_set, key, &start, sizeof(PathNode));
 
     // Init come-from set
-    Table *came_from = table_create(PATH_TABLE_SIZE);
+    Table *came_from = table_create(TABLE_SIZE);
 
     // Init g-score set
-    Table *g_score = table_create(PATH_TABLE_SIZE);
+    Table *g_score = table_create(TABLE_SIZE);
     int score = 0;
     table_set(g_score, key, &score, sizeof(int));
 
     // Init f-score set
-    Table *f_score = table_create(PATH_TABLE_SIZE);
+    Table *f_score = table_create(TABLE_SIZE);
     int h = path_heuristic(&start, goal);
     table_set(f_score, key, &h, sizeof(int));
 
@@ -342,9 +342,6 @@ cleanup:
 //
 // Shortest key order to complete the labyrinth in.
 //
-
-// Too big and iteration becomes slow, too small and lookups become slow
-#define SEQ_TABLE_SIZE (8 * 1024)
 
 struct SeqNode
 {
@@ -617,19 +614,19 @@ Array *seq_find(SeqNode *start)
     char *key = seq_table_key(start);
 
     // Init open set
-    Table *open_set = table_create(SEQ_TABLE_SIZE);
+    Table *open_set = table_create(TABLE_SIZE);
     table_set(open_set, key, &start, sizeof(SeqNode *));
 
     // Init come-from set
-    Table *came_from = table_create(SEQ_TABLE_SIZE);
+    Table *came_from = table_create(TABLE_SIZE);
 
     // Init g-score set
-    Table *g_score = table_create(SEQ_TABLE_SIZE);
+    Table *g_score = table_create(TABLE_SIZE);
     int score = 0;
     table_set(g_score, key, &score, sizeof(int));
 
     // Init f-score set
-    Table *f_score = table_create(SEQ_TABLE_SIZE);
+    Table *f_score = table_create(TABLE_SIZE);
     int h = seq_heuristic(start);
     table_set(f_score, key, &h, sizeof(int));
 
@@ -713,6 +710,12 @@ cleanup:
 
 int main()
 {
+    // This code takes around an hour and tens of gigabytes of memory to execute before printing this:
+    //
+    // Path:   q,64 -> o,224 -> u,74 -> a,70 -> x,12 -> h,252 -> e,34 -> s,296 -> m,312 -> n,100 -> d,22 -> y,384 -> b,402 -> v,226 -> r,22 -> j,56 -> c,506 -> g,18 -> i,20 -> w,16 -> k,18 -> f,16 -> t,18 -> l,18 -> z,22 -> p,14
+    // Steps:  26
+    // Dist:   3216
+
     Board *board = board_load();
     assert(board);
 
