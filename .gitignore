@@ -5,3 +5,7 @@
 *.ilk
 *.pdb
 *.obj
+
+# clang builds
+*.dSYM
+*.out

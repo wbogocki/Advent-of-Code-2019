@@ -109,11 +109,12 @@ size_t table_hash(const char *key)
     // http://www.cse.yorku.ca/~oz/hash.html
 
     size_t hash = 5381;
-    int c;
+    int c = *key++;
 
-    while (c = *key++)
+    while (c)
     {
         hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+        c = *key++;
     }
 
     return hash;

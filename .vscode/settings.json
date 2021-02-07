@@ -8,7 +8,9 @@
     "C_Cpp.dimInactiveRegions": false,
     "files.associations": {
         "*.C": "c",
-        "*.H": "c"
+        "*.H": "c",
+        "limits": "c",
+        "__node_handle": "c"
     },
     "files.exclude": {
         "**/.git": true,
@@ -21,6 +23,10 @@
         "**/*.exe": true,
         "**/*.ilk": true,
         "**/*.pdb": true,
-        "**/*.obj": true
+        "**/*.obj": true,
+
+        // clang builds
+        "**/*.dSYM": true,
+        "**/*.out": true
     }
 }
