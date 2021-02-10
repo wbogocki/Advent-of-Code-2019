@@ -7,7 +7,6 @@
  **/
 
 #include <assert.h>
-#include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,7 +14,7 @@
 
 // Computer
 
-#define MEMORY_SIZE 1024
+#define MEMORY_SIZE (16 * 1024)
 
 typedef long long icv;
 
@@ -44,8 +43,7 @@ const char *OPCODES[] =
         [OP_TLT] = "TLT",
         [OP_TEQ] = "TEQ",
         [OP_RBO] = "RBO",
-        [OP_HLT] = "HLT",
-};
+        [OP_HLT] = "HLT"};
 
 enum pmodes
 {
@@ -359,7 +357,6 @@ int CheckTractorBeam(icv Program[MEMORY_SIZE], int X, int Y)
             break;
         case INT_IN:
             assert(InputsLength > 0);
-            assert(Inputs[InputsLength - 1] >= 0);
             Computer.In = Inputs[--InputsLength];
             break;
         case INT_OUT:
@@ -380,63 +377,103 @@ int main(void)
     icv Program[MEMORY_SIZE] = {0};
     LoadMemory("input.txt", Program);
 
-    int ShipSize = 100;
+    int SShip = 100; // Santa's ship side size
 
-    int X = 0;
-    int Y = ShipSize;
+    int Offset = 10; // Skip the missing front part of the tractor beam
 
-    // Catch the beam
-    while (!CheckTractorBeam(Program, X, Y))
+    // Coordinates of the top tractor beam edge
+    int XTop = Offset * 2;
+    int YTop = Offset;
+
+    // Coordinates of the bottom tractor beam edge at offset SShip - 1
+    int XBot = 0;
+    int YBot = YTop + SShip - 1;
+
+    // Find the beam
+    while (!CheckTractorBeam(Program, XTop, YTop))
     {
-        ++X;
+        --XTop;
+    }
+    while (!CheckTractorBeam(Program, XBot, YBot))
+    {
+        ++XBot;
     }
 
-    // Find the square that fits the ship
-    while (!CheckTractorBeam(Program, X + (ShipSize - 1), Y - (ShipSize - 1)))
+    printf("Tractor beam found at %d,%d top and %d,%d bottom\n", XTop, YTop, XBot, YBot);
+
+    // Trace the beam along top and bottom edges
+    int SRect = 0;
+    while (SRect < SShip)
     {
-        ++Y;
-        while (!CheckTractorBeam(Program, X, Y))
+        // One row down
+        ++YTop;
+        ++YBot;
+
+        // Find the new top edge
+        while (CheckTractorBeam(Program, XTop + 1, YTop))
         {
-            ++X;
+            ++XTop;
         }
 
-        // printf("%d,%d\n", X, Y);
+        // Find the new bottom edge
+        while (!CheckTractorBeam(Program, XBot, YBot))
+        {
+            ++XBot;
+        }
+
+        // Check for anomalies
+        assert(CheckTractorBeam(Program, XTop - 1, YTop));
+        assert(!CheckTractorBeam(Program, XBot - 1, YBot));
+        assert(!CheckTractorBeam(Program, XBot, YBot + 1));
+
+        // Rectangle size
+        SRect = XTop - XBot + 1;
+        // printf("At y=%d tractor beam can fit a %d,%d rectangle\n", YTop, SRect, SShip);
     }
 
-    // Top-left corner of the square
-    Y -= (ShipSize - 1);
+    // Top left corner of the ship's rectangle
+    int XOut = XBot;
+    int YOut = YTop;
 
-    // Find the point closest to the emitter
-    int OutDist = INT_MAX;
-    int OutX = 0;
-    int OutY = 0;
-    for (int x = X; x < X + ShipSize; ++x)
+    assert(CheckTractorBeam(Program, XOut, YOut) && "Top-left corner of the ship is in the tractor beam");
+
+    // Double check that XOut,YOut is closest by comparing distances of points in the rectangle
+    int MinDist = XOut * XOut + YOut * YOut;
+    for (int Y = YTop; Y <= YBot; ++Y)
     {
-        for (int y = Y; y < Y + ShipSize; ++y)
+        for (int X = XBot; X <= XTop; ++X)
         {
-            int Dist = x * x + y * y;
-            if (Dist < OutDist)
+            int Dist = X * X + Y * Y;
+            if (Dist < MinDist)
             {
-                OutDist = Dist;
-                OutX = x;
-                OutY = y;
+                MinDist = Dist;
+                XOut = X;
+                YOut = Y;
             }
         }
     }
 
-    // Print
-    for (int y = Y - 5; y < Y + ShipSize + 5; ++y)
+    int Margin = 5;
+
+    putchar('+');
+    for (int X = XBot - Margin; X < XTop + Margin; ++X)
     {
-        for (int x = X - 5; x < X + ShipSize + 5; ++x)
+        printf("%d", X % 10);
+    }
+    putchar('\n');
+    for (int Y = YTop - Margin; Y < YBot + Margin; ++Y)
+    {
+        printf("%d", Y % 10);
+        for (int X = XBot - Margin; X < XTop + Margin; ++X)
         {
-            if (CheckTractorBeam(Program, x, y))
+            if (CheckTractorBeam(Program, X, Y))
             {
-                if (x == OutX && y == OutY)
+                if (X == XOut && Y == YOut)
                 {
                     putchar('X');
                 }
-                else if (x >= X && x < X + ShipSize &&
-                         y >= Y && y < Y + ShipSize)
+                else if (X >= XBot && X <= XTop &&
+                         Y >= YTop && Y <= YBot)
                 {
                     putchar('O');
                 }
@@ -453,5 +490,5 @@ int main(void)
         putchar('\n');
     }
 
-    printf("Output: %d (%d,%d)\n", OutX * 10000 + OutY, OutX, OutY);
+    printf("Output: %d (%d,%d)\n", XOut * 10000 + YOut, XOut, YOut);
 }

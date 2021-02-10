@@ -15,7 +15,7 @@
 
 // Computer
 
-#define MEMORY_SIZE 1024
+#define MEMORY_SIZE (16 * 1024)
 
 typedef long long icv;
 
@@ -44,8 +44,7 @@ const char *OPCODES[] =
         [OP_TLT] = "TLT",
         [OP_TEQ] = "TEQ",
         [OP_RBO] = "RBO",
-        [OP_HLT] = "HLT",
-};
+        [OP_HLT] = "HLT"};
 
 enum pmodes
 {
@@ -359,8 +358,8 @@ int CheckTractorBeam(icv Program[MEMORY_SIZE], int X, int Y)
             break;
         case INT_IN:
             assert(InputsLength > 0);
-            assert(Inputs[InputsLength - 1] >= 0);
             Computer.In = Inputs[--InputsLength];
+            assert(Computer.In >= 0);
             break;
         case INT_OUT:
             Output = Computer.Out;
@@ -383,43 +382,27 @@ int main(void)
     int ShipSize = 100;
 
     int X = 0;
-    int Y = ShipSize;
+    int Y = 10;
 
-    // Catch the beam
     while (!CheckTractorBeam(Program, X, Y))
     {
         ++X;
     }
 
-    // Find the square that fits the ship
-    while (!CheckTractorBeam(Program, X + (ShipSize - 1), Y - (ShipSize - 1)))
+    while (!CheckTractorBeam(Program, X + (ShipSize - 1), Y) ||
+           !CheckTractorBeam(Program, X, Y + (ShipSize - 1)))
     {
-        ++Y;
-        while (!CheckTractorBeam(Program, X, Y))
+        if (CheckTractorBeam(Program, X + 1, Y))
         {
             ++X;
         }
-
-        // printf("%d,%d\n", X, Y);
-    }
-
-    // Top-left corner of the square
-    Y -= (ShipSize - 1);
-
-    // Find the point closest to the emitter
-    int OutDist = INT_MAX;
-    int OutX = 0;
-    int OutY = 0;
-    for (int x = X; x < X + ShipSize; ++x)
-    {
-        for (int y = Y; y < Y + ShipSize; ++y)
+        else
         {
-            int Dist = x * x + y * y;
-            if (Dist < OutDist)
+            X = 0;
+            ++Y;
+            while (!CheckTractorBeam(Program, X, Y))
             {
-                OutDist = Dist;
-                OutX = x;
-                OutY = y;
+                ++X;
             }
         }
     }
@@ -431,7 +414,7 @@ int main(void)
         {
             if (CheckTractorBeam(Program, x, y))
             {
-                if (x == OutX && y == OutY)
+                if (x == X && y == Y)
                 {
                     putchar('X');
                 }
@@ -453,5 +436,5 @@ int main(void)
         putchar('\n');
     }
 
-    printf("Output: %d (%d,%d)\n", OutX * 10000 + OutY, OutX, OutY);
+    printf("Output: %d (%d,%d)\n", X * 10000 + Y, X, Y);
 }

@@ -15,7 +15,7 @@
 
 // Computer
 
-#define MEMORY_SIZE 1024
+#define MEMORY_SIZE (16 * 1024)
 
 typedef long long icv;
 
@@ -44,8 +44,7 @@ const char *OPCODES[] =
         [OP_TLT] = "TLT",
         [OP_TEQ] = "TEQ",
         [OP_RBO] = "RBO",
-        [OP_HLT] = "HLT",
-};
+        [OP_HLT] = "HLT"};
 
 enum pmodes
 {
@@ -359,7 +358,6 @@ int CheckTractorBeam(icv Program[MEMORY_SIZE], int X, int Y)
             break;
         case INT_IN:
             assert(InputsLength > 0);
-            assert(Inputs[InputsLength - 1] >= 0);
             Computer.In = Inputs[--InputsLength];
             break;
         case INT_OUT:
@@ -406,23 +404,27 @@ int main(void)
     // Top-left corner of the square
     Y -= (ShipSize - 1);
 
-    // Find the point closest to the emitter
-    int OutDist = INT_MAX;
-    int OutX = 0;
-    int OutY = 0;
+    // Point closest to the emitter
+    int MinDist = INT_MAX;
+    int MinX = 0;
+    int MinY = 0;
     for (int x = X; x < X + ShipSize; ++x)
     {
         for (int y = Y; y < Y + ShipSize; ++y)
         {
             int Dist = x * x + y * y;
-            if (Dist < OutDist)
+            if (Dist < MinDist)
             {
-                OutDist = Dist;
-                OutX = x;
-                OutY = y;
+                MinDist = Dist;
+                MinX = x;
+                MinY = y;
             }
+
+            // printf("%d,%d\t%d\n", x, y, Dist);
         }
     }
+    X = MinX;
+    Y = MinY;
 
     // Print
     for (int y = Y - 5; y < Y + ShipSize + 5; ++y)
@@ -431,7 +433,7 @@ int main(void)
         {
             if (CheckTractorBeam(Program, x, y))
             {
-                if (x == OutX && y == OutY)
+                if (x == X && y == Y)
                 {
                     putchar('X');
                 }
@@ -453,5 +455,5 @@ int main(void)
         putchar('\n');
     }
 
-    printf("Output: %d (%d,%d)\n", OutX * 10000 + OutY, OutX, OutY);
+    printf("Output: %d (%d,%d) D2=%d\n", X * 10000 + Y, X, Y, MinDist);
 }
