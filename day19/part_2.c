@@ -9,7 +9,6 @@
 #define INTCODE_IMPL
 
 #include <assert.h>
-#include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -71,7 +70,8 @@ int CheckTractorBeam(icv Program[MEMORY_SIZE], int X, int Y)
     computer Computer = {0};
     memcpy(Computer.Memory, Program, sizeof(icv) * MEMORY_SIZE);
 
-    int Inputs[] = {X, Y};
+    // Inputs are passed last to first
+    int Inputs[] = {Y, X};
     int InputsLength = 2;
 
     int Output = -1;
@@ -134,24 +134,6 @@ int main(void)
     // Top-left corner of the square
     Y -= (ShipSize - 1);
 
-    // Find the point closest to the emitter
-    int OutDist = INT_MAX;
-    int OutX = 0;
-    int OutY = 0;
-    for (int x = X; x < X + ShipSize; ++x)
-    {
-        for (int y = Y; y < Y + ShipSize; ++y)
-        {
-            int Dist = x * x + y * y;
-            if (Dist < OutDist)
-            {
-                OutDist = Dist;
-                OutX = x;
-                OutY = y;
-            }
-        }
-    }
-
     // Print
     for (int y = Y - 5; y < Y + ShipSize + 5; ++y)
     {
@@ -159,7 +141,7 @@ int main(void)
         {
             if (CheckTractorBeam(Program, x, y))
             {
-                if (x == OutX && y == OutY)
+                if (x == X && y == Y)
                 {
                     putchar('X');
                 }
@@ -181,5 +163,5 @@ int main(void)
         putchar('\n');
     }
 
-    printf("Output: %d (%d,%d)\n", OutX * 10000 + OutY, OutX, OutY);
+    printf("Output: %d (%d,%d)\n", X * 10000 + Y, X, Y);
 }

@@ -21,7 +21,7 @@ typedef enum
     OP_JF = 6,   // OK; Jump if false
     OP_TLT = 7,  // OK; Less than
     OP_TEQ = 8,  // OK; Equals
-    OP_ORB = 9,  // OK; Offset relative base
+    OP_ARB = 9,  // OK; Adjust relative base
     OP_HLT = 99, // OK
 } opcode;
 
@@ -35,7 +35,7 @@ const char *OPCODES[] =
         [OP_JF] = "JF",
         [OP_TLT] = "TLT",
         [OP_TEQ] = "TEQ",
-        [OP_ORB] = "ORB",
+        [OP_ARB] = "ARB",
         [OP_HLT] = "HLT",
 };
 
@@ -132,7 +132,7 @@ typedef struct
 } param;
 
 // Advance and read an operation parameter
-param Padvance(computer *Computer, icv Pmodes, icv Ordinal)
+param AdvanceParam(computer *Computer, icv Pmodes, icv Ordinal)
 {
     assert(Ordinal < 3); // There are never more than 3 parameters
     int Pow10[] = {1, 10, 100};
@@ -150,7 +150,7 @@ param Padvance(computer *Computer, icv Pmodes, icv Ordinal)
 }
 
 // Read based on parameter value
-icv Pread(computer *Computer, param Parameter)
+icv ReadParam(computer *Computer, param Parameter)
 {
     switch (Parameter.Mode)
     {
@@ -175,7 +175,7 @@ icv Pread(computer *Computer, param Parameter)
 }
 
 // Write based on parameter value
-void Pwrite(computer *Computer, param Parameter, icv Value)
+void WriteParam(computer *Computer, param Parameter, icv Value)
 {
     switch (Parameter.Mode)
     {
@@ -218,8 +218,8 @@ interrupt Run(computer *Computer)
         icv Pmodes = Op / 100;
         assert(Opcode == OP_IN);
 
-        param P1 = Padvance(Computer, Pmodes, 0);
-        Pwrite(Computer, P1, Computer->In);
+        param P1 = AdvanceParam(Computer, Pmodes, 0);
+        WriteParam(Computer, P1, Computer->In);
     }
 
     ClearInterrupts(Computer);
@@ -235,18 +235,18 @@ interrupt Run(computer *Computer)
         {
         case OP_ADD:
         {
-            param P1 = Padvance(Computer, Pmodes, 0);
-            param P2 = Padvance(Computer, Pmodes, 1);
-            param P3 = Padvance(Computer, Pmodes, 2);
-            Pwrite(Computer, P3, Pread(Computer, P1) + Pread(Computer, P2));
+            param P1 = AdvanceParam(Computer, Pmodes, 0);
+            param P2 = AdvanceParam(Computer, Pmodes, 1);
+            param P3 = AdvanceParam(Computer, Pmodes, 2);
+            WriteParam(Computer, P3, ReadParam(Computer, P1) + ReadParam(Computer, P2));
             break;
         }
         case OP_MUL:
         {
-            param P1 = Padvance(Computer, Pmodes, 0);
-            param P2 = Padvance(Computer, Pmodes, 1);
-            param P3 = Padvance(Computer, Pmodes, 2);
-            Pwrite(Computer, P3, Pread(Computer, P1) * Pread(Computer, P2));
+            param P1 = AdvanceParam(Computer, Pmodes, 0);
+            param P2 = AdvanceParam(Computer, Pmodes, 1);
+            param P3 = AdvanceParam(Computer, Pmodes, 2);
+            WriteParam(Computer, P3, ReadParam(Computer, P1) * ReadParam(Computer, P2));
             break;
         }
         case OP_IN:
@@ -257,65 +257,65 @@ interrupt Run(computer *Computer)
         }
         case OP_OUT:
         {
-            param P1 = Padvance(Computer, Pmodes, 0);
-            Computer->Out = Pread(Computer, P1);
+            param P1 = AdvanceParam(Computer, Pmodes, 0);
+            Computer->Out = ReadParam(Computer, P1);
             SetInterrupt(Computer, INT_OUT);
             return INT_OUT;
         }
         case OP_JT:
         {
-            param P1 = Padvance(Computer, Pmodes, 0);
-            param P2 = Padvance(Computer, Pmodes, 1);
-            if (Pread(Computer, P1) != 0)
+            param P1 = AdvanceParam(Computer, Pmodes, 0);
+            param P2 = AdvanceParam(Computer, Pmodes, 1);
+            if (ReadParam(Computer, P1) != 0)
             {
-                Computer->IP = Pread(Computer, P2);
+                Computer->IP = ReadParam(Computer, P2);
             }
             break;
         }
         case OP_JF:
         {
-            param P1 = Padvance(Computer, Pmodes, 0);
-            param P2 = Padvance(Computer, Pmodes, 1);
-            if (Pread(Computer, P1) == 0)
+            param P1 = AdvanceParam(Computer, Pmodes, 0);
+            param P2 = AdvanceParam(Computer, Pmodes, 1);
+            if (ReadParam(Computer, P1) == 0)
             {
-                Computer->IP = Pread(Computer, P2);
+                Computer->IP = ReadParam(Computer, P2);
             }
             break;
         }
         case OP_TLT:
         {
-            param P1 = Padvance(Computer, Pmodes, 0);
-            param P2 = Padvance(Computer, Pmodes, 1);
-            param P3 = Padvance(Computer, Pmodes, 2);
-            if (Pread(Computer, P1) < Pread(Computer, P2))
+            param P1 = AdvanceParam(Computer, Pmodes, 0);
+            param P2 = AdvanceParam(Computer, Pmodes, 1);
+            param P3 = AdvanceParam(Computer, Pmodes, 2);
+            if (ReadParam(Computer, P1) < ReadParam(Computer, P2))
             {
-                Pwrite(Computer, P3, 1);
+                WriteParam(Computer, P3, 1);
             }
             else
             {
-                Pwrite(Computer, P3, 0);
+                WriteParam(Computer, P3, 0);
             }
             break;
         }
         case OP_TEQ:
         {
-            param P1 = Padvance(Computer, Pmodes, 0);
-            param P2 = Padvance(Computer, Pmodes, 1);
-            param P3 = Padvance(Computer, Pmodes, 2);
-            if (Pread(Computer, P1) == Pread(Computer, P2))
+            param P1 = AdvanceParam(Computer, Pmodes, 0);
+            param P2 = AdvanceParam(Computer, Pmodes, 1);
+            param P3 = AdvanceParam(Computer, Pmodes, 2);
+            if (ReadParam(Computer, P1) == ReadParam(Computer, P2))
             {
-                Pwrite(Computer, P3, 1);
+                WriteParam(Computer, P3, 1);
             }
             else
             {
-                Pwrite(Computer, P3, 0);
+                WriteParam(Computer, P3, 0);
             }
             break;
         }
-        case OP_ORB:
+        case OP_ARB:
         {
-            param P1 = Padvance(Computer, Pmodes, 0);
-            Computer->Rbase += Pread(Computer, P1);
+            param P1 = AdvanceParam(Computer, Pmodes, 0);
+            Computer->Rbase += ReadParam(Computer, P1);
             break;
         }
         case OP_HLT:
