@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <inttypes.h>
+#include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -67,7 +68,8 @@ size_t LoadShuffleProcess(const char *Filename, shuffle Process[SHUFFLE_MAX])
 int64_t Unshuffle(int64_t Card, int64_t DeckSize, shuffle Process[SHUFFLE_MAX], size_t ProcessCount)
 {
     int64_t Out = Card;
-    for (int64_t Index = ProcessCount - 1; Index >= 0; --Index)
+
+    for (int64_t Index = 0; Index < ProcessCount; ++Index)
     {
         shuffle Shuffle = Process[Index];
 
@@ -77,12 +79,12 @@ int64_t Unshuffle(int64_t Card, int64_t DeckSize, shuffle Process[SHUFFLE_MAX], 
         {
         case ST_DEAL_INTO_NEW_STACK:
         {
-            Out = DeckSize - 1 - Card; // Mirror the card to the other side of the deck
+            Out = DeckSize - 1 - Out; // Mirror the card to the other side of the deck
             break;
         }
         case ST_CUT_N_CARDS:
         {
-            int64_t N = Shuffle.N;
+            int64_t N = -Shuffle.N; // Mirror N to reverse
             if (N < 0)
             {
                 N += DeckSize;
@@ -92,45 +94,13 @@ int64_t Unshuffle(int64_t Card, int64_t DeckSize, shuffle Process[SHUFFLE_MAX], 
         }
         case ST_DEAL_WITH_INCREMENT_N:
         {
-            /*
-                0 1 2 3 4 5 6 7 8 9
-                0 . . . . . . 1 . .
-                0 . . . 2 . . 1 . .
-                0 3 . . 2 . . 1 . .
-                0 3 . . 2 . . 1 4 .
-                0 3 . . 2 5 . 1 4 .
-                0 3 6 . 2 5 . 1 4 7
-                0 3 6 . 2 5 8 1 4 7
-                0 3 6 9 2 5 8 1 4 7
+            int64_t N = Shuffle.N;
 
-                Rounds:
-                0 3 5 7 2 4 6 1 3 5
-            */
+            // Michael's formula
+            int64_t Round = N * Out / DeckSize;
+            int64_t Index = N * Out - DeckSize * Round;
 
-            int64_t Round = Out % (DeckSize % Shuffle.N);
-
-            printf("%llu ", Round);
-
-            // Offset to the first element in the round in the source deck
-            int64_t Offset = Round * Shuffle.N;
-
-            // Index of the element in the round after offset
-            int64_t Index = (Out + Round) / Shuffle.N;
-
-            Out = Offset + Index;
-
-            /*
-            // One round lasts until we wrap around the source deck
-            int Round = (DeckSize - 1 - Out) % Shuffle.N; // <--------------- BROKEN
-
-            // Offset to the first element in the round in the source deck
-            int Offset = Round * Shuffle.N;
-
-            // Index of the element in the round after offset
-            int Index = (Out + Round) / Shuffle.N;
-
-            Out = Offset + Index;
-            */
+            Out = Index;
             break;
         }
         default:
@@ -139,13 +109,21 @@ int64_t Unshuffle(int64_t Card, int64_t DeckSize, shuffle Process[SHUFFLE_MAX], 
             exit(1);
         }
         }
+
+        // printf("Out: %llu\n", Out);
     }
+
     return Out;
 }
 
 int main(void)
 {
-    // int64_t Card = 2020;
+    // Keep track of the amount we have to add to each position when we
+    // calculate it (as an integer)
+
+    int64_t CardPosition = 7;
+    int64_t ShuffleCount = 1;
+
     int64_t DeckSize = 10;
 
     shuffle ShuffleProcess[SHUFFLE_MAX] = {0};
@@ -155,9 +133,24 @@ int main(void)
 
     for (int64_t Card = 0; Card < DeckSize; ++Card)
     {
-        int64_t Result = Unshuffle(Card, DeckSize, ShuffleProcess, ShuffleProcessCount);
+        int64_t Out = Unshuffle(Deck[Card], DeckSize, ShuffleProcess, ShuffleProcessCount);
 
-        // printf("%" PRId64 " ", Result);
+        printf("%" PRId64 " (%" PRId64 ") -> %" PRId64 "\n", Card, Deck[Card], Out);
     }
-    putchar('\n');
+
+    // Print thousands separators in numbers
+    setlocale(LC_NUMERIC, "");
+
+    int64_t Out = CardPosition;
+    for (int64_t N = 0; N < ShuffleCount; ++N)
+    {
+        Out = Unshuffle(Out, DeckSize, ShuffleProcess, ShuffleProcessCount);
+
+        if (N % 1000000 == 0)
+        {
+            printf("%'" PRId64 "\t%" PRId64 "\n", N, Out);
+        }
+    }
+
+    printf("Card at position %" PRId64 " is %" PRId64 "\n", CardPosition, Out);
 }
